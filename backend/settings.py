@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework.authtoken',
+    'anymail',
 ]
 
 MIDDLEWARE = [
@@ -136,13 +137,13 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# Email Configuration
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 465 
-EMAIL_USE_SSL = True
+# Email Configuration (Brevo HTTPS API via django-anymail)
+EMAIL_BACKEND = 'anymail.backends.brevo.EmailBackend'
+ANYMAIL = {
+    'BREVO_API_KEY': os.getenv('BREVO_API_KEY'),
+}
 EMAIL_HOST_USER = 'alamsystem.lpu.c@gmail.com'
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_PASSWORD')
+DEFAULT_FROM_EMAIL = 'ALAM System <alamsystem.lpu.c@gmail.com>'
 
 # Database (Cloud PostgreSQL via Neon)
 DATABASES = {
