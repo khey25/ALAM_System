@@ -134,7 +134,7 @@ export default function Login() {
             {/* EMAIL INPUT */}
             {view !== 'guest' && (
               <div>
-                <label className="block text-xs font-medium text-gray-800 mb-2">Email / User</label>
+                <label className="block text-xs font-medium text-gray-800 mb-2">Email</label>
                 <input 
                   type="email" required
                   pattern="[0-9]{4}-[0-9]-[0-9]{5}@lpunetwork\.edu\.ph"
@@ -198,10 +198,10 @@ export default function Login() {
           {/* Navigation Links */}
           {view === 'login' && (
             <div className="mt-16 flex flex-col items-start space-y-4">
-              <button type="button" onClick={() => handleViewChange('guest')} className="text-sm text-blue-600 hover:underline hover:text-blue-800 transition-colors">
+              <button type="button" onClick={() => handleViewChange('guest')} className="text-sm text-gray-500 hover:underline transition-colors">
                 Enter as a guest
               </button>
-              <button type="button" onClick={() => handleViewChange('setup')} className="text-sm text-gray-500 hover:underline transition-colors">
+              <button type="button" onClick={() => handleViewChange('setup')} className="text-sm text-blue-600 hover:underline hover:text-blue-800 transition-colors">
                 First time login? Setup Account
               </button>
             </div>
