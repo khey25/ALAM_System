@@ -125,7 +125,7 @@ def support_message(request):
     message = request.data.get('message')
     
     user_email = request.user.email
-    full_message = f"New support request from: {name}\nUser's Registered Email: {user_email}\n\nMessage:\n{message}"
+    full_message = f"FROM: {name}\nEMAIL: {user_email}\n\nMESSAGE:\n{message}"
 
     try:
         send_mail(
