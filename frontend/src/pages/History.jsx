@@ -15,6 +15,9 @@ export default function History() {
         setLogs(response.data);
         setLoading(false);
       } catch (error) {
+        if (error.response?.status === 403) {
+  navigate('/lost');
+        }
         console.error("Failed to load history:", error);
         setLoading(false);
       }

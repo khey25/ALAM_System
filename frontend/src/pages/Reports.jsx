@@ -35,6 +35,9 @@ export default function Reports() {
       if (error.response && error.response.status === 401) {
         localStorage.clear();
         navigate('/');
+      } else if (error.response && error.response.status === 403) {
+  navigate('/lost');
+    
       }
     }
   };

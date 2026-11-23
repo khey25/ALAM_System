@@ -138,29 +138,31 @@ export default function Account() {
             </div>
 
             {/* ACTION BUTTONS */}
-            <div className="pt-4 flex justify-center w-full">
-              {isEditing ? (
-                <button 
-                  onClick={handleSave} 
-                  disabled={status.saving}
-                  className="px-10 py-3 bg-green-700 text-white font-bold text-xs rounded-full shadow-md hover:bg-green-800 transition-colors disabled:opacity-50 tracking-wider w-[80%]"
-                >
-                  {status.saving ? 'SAVING...' : 'SAVE CHANGES'}
-                </button>
-              ) : (
-                <button 
-                  onClick={() => navigate('/history')}
-                  className="px-10 py-3 bg-[#AF0000] text-white font-bold text-xs rounded-full shadow-md hover:bg-[#8A0000] transition-colors tracking-wider w-[80%]"
-                >
-                  ACCOUNT HISTORY
-                </button>
-              )}
+            {(isEditing || userData.role === 'ADMIN') && (
+              <div className="pt-4 flex justify-center w-full">
+                {isEditing ? (
+                  <button
+                    onClick={handleSave}
+                    disabled={status.saving}
+                    className="px-10 py-3 bg-green-700 text-white font-bold text-xs rounded-full shadow-md hover:bg-green-800 transition-colors disabled:opacity-50 tracking-wider w-[80%]"
+                  >
+                    {status.saving ? 'SAVING...' : 'SAVE CHANGES'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => navigate('/history')}
+                    className="px-10 py-3 bg-[#AF0000] text-white font-bold text-xs rounded-full shadow-md hover:bg-[#8A0000] transition-colors tracking-wider w-[80%]"
+                  >
+                    ACCOUNT HISTORY
+                  </button>
+                )}
+              </div>
+            )}
             </div>
 
           </div>
         </div>
 
       </div>
-    </div>
   );
 }
