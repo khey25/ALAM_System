@@ -1,17 +1,36 @@
+import re
 from datetime import timedelta
 from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+    throttle_classes,
+)
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from items.models import ActivityLog
 from .models import CustomUser
 
 MAGIC_LINK_EXPIRY_MINUTES = 10
+LPU_STUDENT_EMAIL_REGEX = re.compile(r'^[0-9]{4}-[0-9]-[0-9]{5}@lpunetwork\.edu\.ph$')
+PASSWORD_COMPLEXITY_REGEX = re.compile(r'^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}$')
+
+
+class AuthRateThrottle(UserRateThrottle):
+    scope = 'auth'
+
+
+class EmailActionThrottle(UserRateThrottle):
+    scope = 'email_action'
 
 
 def _issue_fresh_token(user):
@@ -23,10 +42,17 @@ def _issue_fresh_token(user):
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@throttle_classes([EmailActionThrottle])
 def setup_account(request):
     email = (request.data.get('email') or '').strip().lower()
     if not email:
         return Response({'error': 'Email is required'}, status=400)
+
+    if not LPU_STUDENT_EMAIL_REGEX.match(email):
+        return Response(
+            {'error': 'Invalid email format. Use your official LPU email (0000-0-00000@lpunetwork.edu.ph).'},
+            status=400
+        )
 
     student_id = email.split('@')[0]
 
@@ -37,6 +63,15 @@ def setup_account(request):
             'role': 'STUDENT'
         }
     )
+
+    if created:
+        user.set_unusable_password()
+        user.save(update_fields=['password'])
+    elif bool(user.password) and user.has_usable_password():
+        return Response(
+            {'error': 'This account is already set up. Please log in or use Forgot Password.'},
+            status=400
+        )
 
     token = _issue_fresh_token(user)
     magic_link = f"{settings.FRONTEND_URL}/set-password/?token={token.key}&type=setup"
@@ -67,13 +102,14 @@ def setup_account(request):
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def login_user(request):
     email = (request.data.get('email') or '').strip().lower()
     password = request.data.get('password')
 
     try:
         user = CustomUser.objects.get(email=email)
-        if user.check_password(password):
+        if user.is_active and user.check_password(password):
             refresh = RefreshToken.for_user(user)
             return Response({
                 'access': str(refresh.access_token),
@@ -88,6 +124,7 @@ def login_user(request):
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def set_password(request):
     token_key = request.data.get('token')
     new_password = request.data.get('password')
@@ -113,7 +150,21 @@ def set_password(request):
             status=400
         )
 
+    if not PASSWORD_COMPLEXITY_REGEX.match(new_password):
+        return Response(
+            {
+                'error': 'Password must be at least 8 characters with 1 uppercase, 1 lowercase, 1 number, and 1 special character (!@#$%^&*).',
+                'expired': False
+            },
+            status=400
+        )
+
     user = token.user
+    try:
+        validate_password(new_password, user=user)
+    except ValidationError as e:
+        return Response({'error': ' '.join(e.messages), 'expired': False}, status=400)
+
     user.set_password(new_password)
     user.save()
     token.delete()  # Invalidates the magic link after a single use
@@ -123,6 +174,7 @@ def set_password(request):
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+@throttle_classes([EmailActionThrottle])
 def forgot_password(request):
     email = (request.data.get('email') or '').strip().lower()
     if not email:
@@ -160,10 +212,14 @@ def forgot_password(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([EmailActionThrottle])
 def support_message(request):
-    name = request.data.get('name')
-    subject = request.data.get('subject')
-    message = request.data.get('message')
+    name = (request.data.get('name') or '').strip()
+    subject = (request.data.get('subject') or '').strip()
+    message = (request.data.get('message') or '').strip()
+
+    if not name or not subject or not message:
+        return Response({"error": "Name, subject, and message are required."}, status=400)
 
     user_email = request.user.email
     full_message = f"FROM: {name}\nEMAIL: {user_email}\n\nMESSAGE:\n{message}"
@@ -181,7 +237,7 @@ def support_message(request):
         print("\n=== EMAIL ERROR (SUPPORT) ===")
         print(e)
         print("=============================\n")
-        return Response({"error": str(e)}, status=500)
+        return Response({"error": "Failed to send support message. Please try again later."}, status=500)
 
 
 @api_view(['GET', 'PUT'])
@@ -200,14 +256,20 @@ def account_profile(request):
         })
 
     elif request.method == 'PUT':
-        user.full_name = request.data.get('full_name', user.full_name)
-        user.contact_number = request.data.get('contact_number', user.contact_number)
-        user.save()
+        full_name = (request.data.get('full_name', user.full_name) or '').strip()
+        contact_number = (request.data.get('contact_number', user.contact_number) or '').strip()
 
-        ActivityLog.objects.create(
+    if len(contact_number) > 15:
+        return Response({'error': 'Contact number must be 15 characters or fewer.'}, status=400)
+
+    user.full_name = full_name
+    user.contact_number = contact_number
+    user.save()
+
+    ActivityLog.objects.create(
             user=user,
             action_type='EDIT_PROFILE',
             description="Updated personal account details (Name/Contact)."
         )
 
-        return Response({'message': 'Profile updated successfully'})
+    return Response({'message': 'Profile updated successfully'})
